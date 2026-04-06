@@ -448,6 +448,12 @@ def compare_variable_to_orig(
     )
     plt.colorbar(mesh_orig, ax=axes[1], pad=0.02, label=da_orig.attrs.get("units", ""))
 
+    # Lock both panels to the processed dataset's time extent
+    t_min_ds = ds.time.values[0]
+    t_max_ds = ds.time.values[-1]
+    for _ax in axes:
+        _ax.set_xlim(t_min_ds, t_max_ds)
+
     # Y-axis limits: explicit or derived from finite data extent across both panels
     if ylim is not None:
         y_min, y_max = ylim
