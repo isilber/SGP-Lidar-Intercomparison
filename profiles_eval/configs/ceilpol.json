@@ -1,0 +1,44 @@
+{
+  "instrument_info": {
+    "name": "Polarized Ceilometer (Vaisala CL61)",
+    "type": "lidar",
+    "instrument_class": "ceilpol",
+    "level": "b1",
+    "requires_corrections": false
+  },
+  "variables": {
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "range",
+      "units": "m"
+    },
+    "attenuated_backscatter": {
+      "name_in_file": "beta_att",
+      "units": "1/(m sr)"
+    },
+    "linear_depol_ratio": {
+      "name_in_file": "linear_depol_ratio",
+      "units": "1"
+    },
+    "cloud_base": {
+      "name_in_file": "cloud_base_heights",
+      "units": "m"
+    },
+    "precipitation_detection": {
+      "name_in_file": "precipitation_detection",
+      "units": "1"
+    },
+    "fog_detection": {
+      "name_in_file": "fog_detection",
+      "units": "1"
+    }
+  },
+  "coordinates": {
+    "time": "time",
+    "range": "range",
+    "layer": "layer"
+  }
+}
