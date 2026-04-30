@@ -1,22 +1,40 @@
 {
   "instrument_info": {
-    "name": "CEIL (CL31)",
+    "name": "Ceilometer (CL31)",
+    "type": "lidar",
     "instrument_class": "ceil10m",
-    "level": "b1"
-
+    "level": "b1",
+    "requires_corrections": false
   },
   "variables": {
-    "time": "time",
-    "range": "range",
-    "attenuated_backscatter": "backscatter"
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "range",
+      "units": "m"
+    },
+    "attenuated_backscatter": {
+      "name_in_file": "backscatter",
+      "units": "1/(sr*km*10000)"
+    },
+    "cloud_base": {
+      "name_in_file": "first_cbh",
+      "units": "km"
+    },
+    "cloud_base2": {
+      "name_in_file": "second_cbh",
+      "units": "km"
+    },
+    "cloud_base3": {
+      "name_in_file": "third_cbh",
+      "units": "km"
+    }
   },
   "coordinates": {
     "time": "time",
-    "range": "range"
-  },
-  "units": {
-    "time": "sec",
-    "range": "m",
-    "attenuated_backscatter": "1/(sr*km*10000)"
+    "range": "range",
+    "layer": "layer"
   }
 }

@@ -1,43 +1,76 @@
 {
   "instrument_info": {
-    "name": "HSRL",
+    "name": "High spectral resolution lidar (HSRL)",
+    "type": "lidar",
     "instrument_class": "hsrl",
-    "level": "a1"
+    "instrument_class_highres": "hsrl5s",
+    "level": "a1",
+    "requires_corrections": false
   },
   "variables": {
-    "time": "time",
-    "range": "range",
-    "optical_depth": "od_aerosol",
-    "molecular_attenuated_backscatter": "atten_beta_r_backscatter",
-    "attenuated_backscatter": "atten_beta_a_backscatter",
-    "attenuated_backscatter_1064nm": "atten_beta_a_1064nm_backscatter",
-    "particulate_backscatter": "beta_a_backscatter",
-    "particulate_backscatter_1064nm": "beta_a_1064_backscatter",
-    "particulate_extinction": "extinction_aerosol",
-    "linear_depol_ratio": "linear_depol_ratio",
-    "linear_depol_ratio_1064nm": "linear_depol_1064",
-    "molecular_signal_to_noise": "molecular_signal_to_noise",
-    "particulate_backscatter_signal_to_noise": "particulate_backscatter_signal_to_noise",
-    "color_ratio": "color_ratio"
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "range",
+      "units": "m"
+    },
+    "particulate_backscatter": {
+      "name_in_file": "beta_a_backscatter",
+      "units": "1/(m*sr)"
+    },
+    "particulate_backscatter_1064nm": {
+      "name_in_file": "beta_a_1064_backscatter",
+      "units": "1/(m*sr)"
+    },
+    "particulate_extinction": {
+      "name_in_file": "extinction_aerosol",
+      "units": "1/m"
+    },
+    "linear_depol_ratio": {
+      "name_in_file": "linear_depol",
+      "units": "1"
+    },
+    "linear_depol_ratio_1064nm": {
+      "name_in_file": "linear_depol_1064",
+      "units": "1"
+    },
+    "optical_depth": {
+      "name_in_file": "od_aerosol",
+      "units": "1"
+    },
+    "molecular_attenuated_backscatter": {
+      "name_in_file": "atten_beta_r_backscatter",
+      "units": "1/(m*sr)"
+    },
+    "attenuated_backscatter": {
+      "name_in_file": "atten_beta_a_backscatter",
+      "units": "1/(m*sr)"
+    },
+    "attenuated_backscatter_1064nm": {
+      "name_in_file": "atten_beta_a_1064nm_backscatter",
+      "units": "1/(m*sr)"
+    },
+    "particulate_backscatter_std": {
+      "name_in_file": "beta_a_backscatter_std",
+      "units": "1/(m*sr)"
+    },
+    "molecular_signal_to_noise": {
+      "name_in_file": "molecular_signal_to_noise",
+      "units": "1"
+    },
+    "particulate_backscatter_signal_to_noise": {
+      "name_in_file": "particulate_backscatter_signal_to_noise",
+      "units": "1"
+    },
+    "color_ratio": {
+      "name_in_file": "color_ratio",
+      "units": "1"
+    }
   },
   "coordinates": {
     "time": "time",
     "range": "range"
-  },
-  "units": {
-    "time": "sec",
-    "range": "m",
-    "optical_depth": "1",
-    "molecular_attenuated_backscatter": "1/(m*sr)",
-    "attenuated_backscatter": "1/(m*sr)",
-    "attenuated_backscatter_1064nm": "1/(m*sr)",
-    "particulate_backscatter": "1/(m*sr)",
-    "particulate_backscatter_1064nm": "1/(m*sr)",
-    "particulate_extinction": "1/m",
-    "linear_depol_ratio": "1",
-    "linear_depol_ratio_1064nm": "1",
-    "molecular_signal_to_noise": "1",
-    "particulate_backscatter_signal_to_noise": "1",
-    "color_ratio": "1"
   }
 }

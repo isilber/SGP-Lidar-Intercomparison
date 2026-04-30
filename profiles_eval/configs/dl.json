@@ -1,0 +1,35 @@
+{
+  "instrument_info": {
+    "name": "Doppler Lidar (Halo Streamline)",
+    "type": "lidar",
+    "instrument_class": "dlfpt",
+    "level": "b1",
+    "requires_corrections": false
+  },
+  "variables": {
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "range",
+      "units": "m"
+    },
+    "attenuated_backscatter": {
+      "name_in_file": "attenuated_backscatter",
+      "units": "1/(m sr)"
+    },
+    "radial_velocity": {
+      "name_in_file": "radial_velocity",
+      "units": "m/s"
+    },
+    "qc_radial_velocity": {
+      "name_in_file": "qc_radial_velocity",
+      "units": "1"
+    }
+  },
+  "coordinates": {
+    "time": "time",
+    "range": "range"
+  }
+}

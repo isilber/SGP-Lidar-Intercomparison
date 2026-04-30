@@ -1,0 +1,63 @@
+{
+  "instrument_info": {
+    "name": "miniMPL",
+    "type": "lidar",
+    "instrument_class": "minimpl",
+    "level": "b1",
+    "requires_corrections": true
+  },
+  "variables": {
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "range",
+      "units": "km"
+    },
+    "raw_signal_co_pol": {
+      "name_in_file": "signal_return_co_pol",
+      "units": "counts/us"
+    },
+    "raw_signal_cross_pol": {
+      "name_in_file": "signal_return_cross_pol",
+      "units": "counts/us"
+    },
+    "background_co_pol": {
+      "name_in_file": "background_signal_co_pol",
+      "units": "counts/us"
+    },
+    "background_cross_pol": {
+      "name_in_file": "background_signal_cross_pol",
+      "units": "counts/us"
+    },
+    "attenuated_backscatter": {
+      "name_in_file": "nrb_co",
+      "units": "counts/us km^2"
+    },
+    "linear_depol_ratio": {
+      "name_in_file": "ldr",
+      "units": "1"
+    },
+    "attenuated_backscatter_cross_pol": {
+      "name_in_file": "nrb_cross",
+      "units": "counts/us km^2"
+    }
+  },
+  "coordinates": {
+    "time": "time",
+    "range": "range"
+  },
+  "corrections": {
+    "deadtime_counts":             "deadtime_correction_counts",
+    "deadtime_factors":            "deadtime_correction",
+    "afterpulse_range":            "range",
+    "afterpulse_profile_co_pol":   "afterpulse_correction_co_pol",
+    "afterpulse_profile_cross_pol":"afterpulse_correction_cross_pol",
+    "darkcounts_range":            "range",
+    "darkcounts_profile_co_pol":   "darkcount_correction_co_pol",
+    "darkcounts_profile_cross_pol":"darkcount_correction_cross_pol",
+    "overlap_range":               "overlap_correction_heights",
+    "overlap_factors":             "overlap_correction"
+  }
+}

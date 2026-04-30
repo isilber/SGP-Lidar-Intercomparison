@@ -1,0 +1,62 @@
+{
+  "instrument_info": {
+    "name": "Interpolated Sonde",
+    "type": "aux",
+    "instrument_class": "interpolatedsonde",
+    "level": "c1"
+  },
+  "variables": {
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "height",
+      "units": "m"
+    },
+    "temp": {
+      "name_in_file": "temp",
+      "units": "degC"
+    },
+    "qc_temp": {
+      "name_in_file": "qc_temp",
+      "units": "1"
+    },
+    "rh": {
+      "name_in_file": "rh",
+      "units": "%"
+    },
+    "qc_rh": {
+      "name_in_file": "qc_rh",
+      "units": "1"
+    },
+    "pres": {
+      "name_in_file": "bar_pres",
+      "units": "kPa"
+    },
+    "qc_pres": {
+      "name_in_file": "qc_bar_pres",
+      "units": "1"
+    },
+    "wspd": {
+      "name_in_file": "wspd",
+      "units": "m s-1"
+    },
+    "qc_wspd": {
+      "name_in_file": "qc_wspd",
+      "units": "1"
+    },
+    "wdir": {
+      "name_in_file": "wdir",
+      "units": "degree"
+    },
+    "qc_wdir": {
+      "name_in_file": "qc_wdir",
+      "units": "1"
+    }
+  },
+  "coordinates": {
+    "time": "time",
+    "range": "height"
+  }
+}

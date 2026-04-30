@@ -1,42 +1,68 @@
 {
   "instrument_info": {
     "name": "MPL",
+    "type": "lidar",
     "instrument_class": "mplcmaskml",
-    "level": "c1"
-
+    "level": "c1",
+    "requires_corrections": false
   },
   "variables": {
-    "time": "time",
-    "range": "height",
-    "attenuated_backscatter": "range_corrected_backscatter",
-    "qc_preprocess_backscatter": "qc_preprocess_backscatter",
-    "linear_depol_ratio": "linear_depol_ratio",
-    "qc_linear_depol_ratio": "qc_linear_depol_ratio",
-    "feature_mask": "cloud_mask",
-    "qc_feature_mask": "qc_cloud_mask",
-    "feature_confidence": "cloud_mask_confidence",
-    "cloud_base": "cloud_base",
-    "cloud_top": "cloud_top",
-    "num_cloud_layers": "num_cloud_layers",
-    "qc_num_cloud_layers": "qc_num_cloud_layers"
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "height",
+      "units": "km"
+    },
+    "attenuated_backscatter": {
+      "name_in_file": "range_corrected_backscatter",
+      "units": "km^2*count/us"
+    },
+    "qc_preprocess_backscatter": {
+      "name_in_file": "qc_preprocess_backscatter",
+      "units": "1"
+    },
+    "linear_depol_ratio": {
+      "name_in_file": "linear_depol_ratio",
+      "units": "1"
+    },
+    "qc_linear_depol_ratio": {
+      "name_in_file": "qc_linear_depol_ratio",
+      "units": "1"
+    },
+    "feature_mask": {
+      "name_in_file": "cloud_mask",
+      "units": "1"
+    },
+    "qc_feature_mask": {
+      "name_in_file": "qc_cloud_mask",
+      "units": "1"
+    },
+    "feature_confidence": {
+      "name_in_file": "cloud_mask_confidence",
+      "units": "1"
+    },
+    "cloud_base": {
+      "name_in_file": "cloud_base",
+      "units": "km"
+    },
+    "cloud_top": {
+      "name_in_file": "cloud_top",
+      "units": "km"
+    },
+    "num_cloud_layers": {
+      "name_in_file": "num_cloud_layers",
+      "units": "1"
+    },
+    "qc_num_cloud_layers": {
+      "name_in_file": "qc_num_cloud_layers",
+      "units": "1"
+    }
   },
   "coordinates": {
     "time": "time",
-    "range": "height"
-  },
-  "units": {
-    "time": "sec",
-    "range": "km",
-    "attenuated_backscatter": "km^2*count/us",
-    "qc_preprocess_backscatter": "1",
-    "linear_depol_ratio": "1",
-    "qc_linear_depol_ratio": "1",
-    "cloud_mask": "1",
-    "qc_cloud_mask": "1",
-    "cloud_mask_confidence": "1",
-    "cloud_base": "km",
-    "cloud_top": "km",
-    "num_cloud_layers": "1",
-    "qc_num_cloud_layers": "1"
+    "range": "height",
+    "layer": "layer"
   }
 }
