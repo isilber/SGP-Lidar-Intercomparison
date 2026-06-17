@@ -30,6 +30,64 @@ _PRIORITY_VARS = [
 ]
 
 
+def _native_time_res_str(time_arr: np.ndarray) -> str:
+    """
+    Compute median native time resolution from a time array.
+    
+    Parameters
+    ----------
+    time_arr : np.ndarray
+        1D array of datetime64 values.
+        
+    Returns
+    -------
+    str
+        Median time step formatted as e.g. "30 s".
+    """
+    if len(time_arr) < 2:
+        return "undetermined (only one time point)"
+    diffs = np.diff(time_arr)
+    # Convert to timedelta64 and extract median in seconds
+    diffs_s = diffs / np.timedelta64(1, "s")
+    median_s = float(np.median(diffs_s))
+    
+    # Format: prefer integer or fraction seconds if < 60, otherwise round to nearest second.
+    if median_s < 60:    
+        return f"{int(median_s)} s" if median_s == int(median_s) else f"{median_s:.1f} s"
+    else:
+        return f"{int(median_s)} s"
+
+
+def _native_range_res_str(range_da: xr.DataArray, units_str: str) -> str:
+    """
+    Compute median native range resolution from a range array.
+    
+    Always returns result in km.
+    
+    Parameters
+    ----------
+    range_da : xr.DataArray
+        1D array of range/height values.
+    units_str : str
+        Unit string (e.g. "m", "km").
+        
+    Returns
+    -------
+    str
+        Median range spacing in km, formatted as e.g. "0.015 km", "0.5 km".
+    """
+    if len(range_da) < 2:
+        return "undetermined (only one range gate)"
+    diffs = np.diff(range_da.values)
+    median_diff = float(np.median(np.abs(diffs)))
+    
+    # Convert to km if needed
+    scale_to_km = 1.0 / 1000.0 if units_str.lower() == "m" else 1.0
+    median_km = median_diff * scale_to_km
+    
+    return f"{median_km:.4g} km"
+
+
 def _ordered_vars(var_names: list[str]) -> list[str]:
     """Return *var_names* in canonical order with qc_ vars after their parent.
 
@@ -526,6 +584,16 @@ def load_and_process_arm_data(
     )
 
     # ------------------------------------------------------------------
+    # Capture native resolutions from primary dataset
+    # ------------------------------------------------------------------
+    native_time_res = _native_time_res_str(ds.time.values)
+    range_coord = ds.get(range_nif, ds.coords.get(range_nif))
+    native_range_res = (
+        _native_range_res_str(range_coord, range_units)
+        if range_coord is not None else "unknown"
+    )
+
+    # ------------------------------------------------------------------
     # 2. Load high-resolution dataset if specified
     # ------------------------------------------------------------------
     highres_class = info.get("instrument_class_highres")
@@ -541,6 +609,19 @@ def load_and_process_arm_data(
             )
         except FileNotFoundError:
             ds_highres = None
+    
+    # Capture native resolutions from high-res dataset if available
+    native_time_res2 = None
+    native_range_res2 = None
+    highres_range_units = None
+    if ds_highres is not None:
+        # Derive range units from highres dataset, not primary dataset
+        _hr_range_da = ds_highres.get(range_nif, ds_highres.coords.get(range_nif))
+        highres_range_units = (
+            _hr_range_da.attrs.get("units", "m") if _hr_range_da is not None else "m"
+        )
+        native_time_res2 = _native_time_res_str(ds_highres.time.values)
+        native_range_res2 = _native_range_res_str(ds_highres["range"], highres_range_units)
 
     # ------------------------------------------------------------------
     # 3. Apply NRB corrections if required
@@ -711,11 +792,11 @@ def load_and_process_arm_data(
                 time_max=time_max,
                 range_km=range_km,
                 time_step=time_step,
-                range_units=range_units,
+                range_units=highres_range_units,
             )
             highres_max_range = float(
                 ds_highres["range"].max()
-                / (1000.0 if range_units.lower() == "m" else 1.0)
+                / (1000.0 if highres_range_units.lower() == "m" else 1.0)
             )
             out_range = ds["range"].values if "range" in ds.coords else range_km
             for var in ds.data_vars:
@@ -729,16 +810,41 @@ def load_and_process_arm_data(
                     ds[var],
                 )
                 blended.attrs = ds[var].attrs
-                # Update source attributes to reflect both streams
+                # Add _2 suffixed source attributes from highres data
+                hr_field = ds_highres_interp[var].attrs.get("source_fieldname", "")
+                if hr_field:
+                    blended.attrs["source_fieldname_2"] = hr_field
                 hr_src = ds_highres_interp[var].attrs.get("source_datastream", "")
-                blended.attrs["source_datastream"] = (
-                    f"{ds[var].attrs.get('source_datastream','')},{hr_src}".strip(",")
-                )
+                if hr_src:
+                    blended.attrs["source_datastream_2"] = hr_src
                 hr_pv = ds_highres_interp[var].attrs.get("source_process_version", "")
-                blended.attrs["source_process_version"] = (
-                    f"{ds[var].attrs.get('source_process_version','')},{hr_pv}".strip(",")
-                )
+                if hr_pv:
+                    blended.attrs["source_process_version_2"] = hr_pv
                 ds[var] = blended
+
+    # ------------------------------------------------------------------
+    # Attach temporal and vertical resolution attributes to all variables
+    # ------------------------------------------------------------------
+    for var in ds.data_vars:
+        # All variables get temporal_resolution
+        ds[var].attrs["temporal_resolution"] = native_time_res
+        
+        # Range-dimensioned variables get vertical_resolution (in km)
+        if "range" in ds[var].dims:
+            ds[var].attrs["vertical_resolution"] = native_range_res
+        
+        # Layer-dimensioned variables also get vertical_resolution (1 layer unit in km)
+        if "layer" in ds[var].dims:
+            ds[var].attrs["vertical_resolution"] = native_range_res
+        
+        # If HSRL high-res blending occurred, add _2 suffixed attrs
+        if ds_highres is not None:
+            # Temporal resolution applies to all variables with time dimension
+            if "time" in ds[var].dims:
+                ds[var].attrs["temporal_resolution_2"] = native_time_res2
+            # Vertical resolution applies to variables with range dimension
+            if "range" in ds[var].dims:
+                ds[var].attrs["vertical_resolution_2"] = native_range_res2
 
     # ------------------------------------------------------------------
     # Final step: rename variables from name_in_file to canonical JSON key
@@ -900,3 +1006,79 @@ def export_dataset(
     )
 
     return out_file.resolve()
+
+
+# ---------------------------------------------------------------------------
+# Geographic metadata extraction
+# ---------------------------------------------------------------------------
+
+def extract_geographic_metadata(
+    instrument_types: list[str],
+    site: str,
+    facility: str,
+    data_path: str | Path | None,
+    time_min: np.datetime64,
+    time_max: np.datetime64,
+    safety_delta: np.timedelta64 = np.timedelta64(5, "m"),
+    config_dir: str = "./configs",
+    data_path_template: str | None = None,
+) -> dict[str, xr.DataArray]:
+    """
+    Extract geographic metadata (lat, lon, alt) from the first available data file.
+
+    Attempts to locate and open data files for each instrument in order, extracting
+    the 0-D geographic coordinate fields (lat, lon, alt) from the first successful
+    file found. Returns a dictionary mapping field names to 0-D DataArrays with
+    full attributes preserved.
+
+    Parameters
+    ----------
+    instrument_types : list[str]
+        List of instrument identifiers to search, in priority order.
+    site : str
+        ARM site code.
+    facility : str
+        ARM facility code.
+    data_path : str, Path, or None
+        Directory containing instrument data files. Pass ``None``
+        when ``data_path_template`` is used instead.
+    time_min : np.datetime64
+        Start of time window for file discovery.
+    time_max : np.datetime64
+        End of time window for file discovery.
+    safety_delta : np.timedelta64, optional
+        Lookback/ahead margin for file discovery. Default is 5 minutes.
+    config_dir : str, optional
+        Directory containing JSON configuration files. Default is ``"./configs"``.
+    data_path_template : str, optional
+        Format string for the ARM nested archive layout. Used when ``data_path``
+        is ``None``.
+
+    Returns
+    -------
+    dict[str, xr.DataArray]
+        Dictionary mapping field names ("lat", "lon", "alt") to 0-D DataArrays
+        with preserved attributes. Returns only fields that were found; missing
+        fields are omitted from the dictionary.
+    """
+    geo_data: dict[str, xr.DataArray] = {}
+
+    for instr in instrument_types:
+        try:
+            files = find_arm_files(
+                instr, site, facility, data_path,
+                time_min, time_max, safety_delta, config_dir,
+                data_path_template=data_path_template,
+            )
+            if files:
+                with xr.open_dataset(str(files[0])) as raw_ds:
+                    for field in ["lat", "lon", "alt"]:
+                        if field in raw_ds:
+                            # Keep the full 0-D DataArray with attributes
+                            geo_data[field] = raw_ds[field]
+                    if geo_data:
+                        break
+        except Exception:
+            continue
+
+    return geo_data

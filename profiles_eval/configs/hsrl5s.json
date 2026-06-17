@@ -1,9 +1,8 @@
 {
   "instrument_info": {
-    "name": "High spectral resolution lidar (HSRL)",
+    "name": "High spectral resolution lidar (HSRL) 5-second resolution",
     "type": "lidar",
-    "instrument_class": "hsrl",
-    "instrument_class_highres": "hsrl5s",
+    "instrument_class": "hsrl5s",
     "level": "a1",
     "requires_corrections": false
   },

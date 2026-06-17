@@ -46,7 +46,7 @@ def get_common_variables(instrument_types: List[str], config_dir: str = "./confi
 
 
 # Default output grids
-_DEFAULT_RANGE_KM = np.arange(0.0, 20.0 + 0.015, 0.015)   # 0–20 km, 15 m steps
+_DEFAULT_RANGE_KM = np.arange(0.0, 20.0 + 0.005, 0.010)   # 0–20 km, 10 m steps (IS Update 6/16/2026 per REAL meeting feedback)
 
 
 def interpolate_data(
@@ -84,7 +84,7 @@ def interpolate_data(
         End of the output time grid (inclusive).
     range_km : np.ndarray, optional
         1-D array of output range gate centres in **km**.  Defaults to
-        ``np.arange(0, 20.015, 0.015)`` (0–20 km in 15 m increments).
+        ``np.arange(0, 20.015, 0.015)`` (0-20 km in 15 m increments).
         Ignored for variables that have no range dimension.
     time_step : np.timedelta64, optional
         Spacing between output time steps.  Default is 15 s.
