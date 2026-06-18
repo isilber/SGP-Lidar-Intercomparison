@@ -152,3 +152,71 @@ def find_instrument_type(
         except Exception:
             continue
     return None
+
+
+def load_facility_pairs(config_dir: str = "./configs") -> Dict:
+    """
+    Load the facility-pairing configuration.
+
+    Reads ``facility_pairs.json`` from *config_dir* to determine which
+    (site, facility) combinations have supplementary facilities. Returns
+    an empty dict if the file does not exist.
+
+    Parameters
+    ----------
+    config_dir : str, optional
+        Directory containing JSON configuration files, by default "./configs"
+
+    Returns
+    -------
+    Dict
+        Parsed dictionary with structure::
+
+            {
+              "site_code": {
+                "facility_code": { "supplementary_facilities": ["fac1", "fac2"] }
+              }
+            }
+
+        Returns ``{}`` if facility_pairs.json does not exist.
+    """
+    pairs_file = Path(config_dir) / "facility_pairs.json"
+
+    if not pairs_file.exists():
+        return {}
+
+    try:
+        with open(pairs_file, "r") as f:
+            pairs = json.load(f)
+        return pairs
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in facility pairs file {pairs_file}: {e}")
+
+
+def get_supplementary_facilities(
+    site: str, facility: str, config_dir: str = "./configs"
+) -> list[str]:
+    """
+    Get the list of supplementary facilities for a given (site, facility) pair.
+
+    Consults the facility-pairing configuration (loaded via
+    :func:`load_facility_pairs`) and returns any supplementary facilities
+    configured for the given primary (site, facility) combination.
+
+    Parameters
+    ----------
+    site : str
+        ARM site code, e.g. ``"sgp"``.
+    facility : str
+        ARM facility code, e.g. ``"C1"``.
+    config_dir : str, optional
+        Directory containing JSON configuration files, by default "./configs"
+
+    Returns
+    -------
+    list[str]
+        List of supplementary facility codes, or empty list if none are
+        defined for this (site, facility) pair.
+    """
+    pairs = load_facility_pairs(config_dir)
+    return pairs.get(site, {}).get(facility, {}).get("supplementary_facilities", [])
