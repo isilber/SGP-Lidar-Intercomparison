@@ -39,11 +39,13 @@ DATA_PATH_TEMPLATE = "/data/archive/{site}/{site}{instrument_class}{facility}.{l
 ALL_INSTRUMENTS = [
     "ceil",
     "ceilpol",
-    "dl",
     "hsrl",
+    "rl",
     "minimpl",
     "mpl",
-    "rl",
+    "dl",
+    "dlwindstat",
+    "dlwind",
     "interpolatedsonde",
 ]
 

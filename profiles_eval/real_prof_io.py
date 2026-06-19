@@ -986,6 +986,11 @@ def export_dataset(
     ds_out = xr.Dataset(coords={**ordered_coords, **other_coords}, attrs=ds.attrs)
     for v in ds.data_vars:
         ds_out[v] = ds[v]
+    
+    # Set range coordinate attributes if range exists
+    if "range" in ds_out.coords:
+        ds_out["range"].attrs["long_name"] = "Range to measurement volume"
+        ds_out["range"].attrs["units"] = "km"
 
     # Materialise any dask-backed arrays before writing.  open_mfdataset
     # returns lazy arrays; driving them through to_netcdf via the dask

@@ -1,0 +1,63 @@
+{
+  "instrument_info": {
+    "name": "Doppler Lidar (Halo Streamline)",
+    "type": "lidar",
+    "instrument_class": "dlprofwind4news",
+    "level": "c1",
+    "requires_corrections": false
+  },
+  "variables": {
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "range": {
+      "name_in_file": "height",
+      "units": "m"
+    },
+    "u": {
+      "name_in_file": "u",
+      "units": "m/s"
+    },
+    "u_error": {
+      "name_in_file": "u_error",
+      "units": "m/s"
+    },
+    "v": {
+      "name_in_file": "v",
+      "units": "m/s"
+    },
+    "v_error": {
+      "name_in_file": "v_error",
+      "units": "m/s"
+    },
+    "w": {
+      "name_in_file": "w",
+      "units": "m/s"
+    },
+    "w_error": {
+      "name_in_file": "w_error",
+      "units": "m/s"
+    },
+    "wind_speed": {
+      "name_in_file": "wind_speed",
+      "units": "m/s"
+    },
+    "wind_speed_error": {
+      "name_in_file": "wind_speed_error",
+      "units": "m/s"
+    },
+    "wind_direction": {
+      "name_in_file": "wind_direction",
+      "units": "deg"
+    },
+    "wind_direction_error": {
+      "name_in_file": "wind_direction_error",
+      "units": "deg"
+    }
+  },
+  "coordinates": {
+    "time": "time",
+    "range": "range"
+  }
+}
