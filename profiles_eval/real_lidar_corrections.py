@@ -237,7 +237,7 @@ def compute_nrb(
     overlap_range: np.ndarray,
     overlap_factors: np.ndarray,
     calibration_constant: float = 1.0,
-    deadtime_poly_degree: str = 1,
+    deadtime_poly_degree: int = 1,
     deadtime_n_extrap_samples: int = 3,
 ) -> np.ndarray:
     """
@@ -432,7 +432,18 @@ def compute_nrb_dataset(
 
     # Extract all arrays from the dataset upfront
     range_km         = ds[_name(v["range"])].values
-    raw_co           = ds[_name(v["raw_signal_co_pol"])].values
+    
+    # Extract raw co-pol signal and ensure (time, range_or_spatial_dim) layout
+    raw_co_da = ds[_name(v["raw_signal_co_pol"])]
+    # Find the spatial dimension name (could be 'range', 'range_bins', 'height', etc.)
+    dims_list = list(raw_co_da.dims)
+    time_dim = next((d for d in dims_list if d == "time"), None)
+    spatial_dim = next((d for d in dims_list if d != "time"), None)
+    
+    if time_dim and spatial_dim and [time_dim, spatial_dim] != dims_list:
+        raw_co_da = raw_co_da.transpose(time_dim, spatial_dim)
+    raw_co = raw_co_da.values
+    
     background_co    = ds[_name(v["background_co_pol"])].values
     dt_counts        = ds[c["deadtime_counts"]].values
     dt_factors       = ds[c["deadtime_factors"]].values
@@ -469,7 +480,16 @@ def compute_nrb_dataset(
     }
 
     if cross_pol:
-        raw_cross        = ds[_name(v["raw_signal_cross_pol"])].values
+        # Extract raw cross-pol signal and ensure (time, range_or_spatial_dim) layout
+        raw_cross_da = ds[_name(v["raw_signal_cross_pol"])]
+        dims_list = list(raw_cross_da.dims)
+        time_dim = next((d for d in dims_list if d == "time"), None)
+        spatial_dim = next((d for d in dims_list if d != "time"), None)
+        
+        if time_dim and spatial_dim and [time_dim, spatial_dim] != dims_list:
+            raw_cross_da = raw_cross_da.transpose(time_dim, spatial_dim)
+        raw_cross = raw_cross_da.values
+        
         background_cross = ds[_name(v["background_cross_pol"])].values
         ap_profile_cross = ds[c["afterpulse_profile_cross_pol"]].values
         dc_profile_cross = ds[c["darkcounts_profile_cross_pol"]].values
@@ -521,13 +541,15 @@ if __name__ == "__main__":
     # Load data and compute NRB dataset
     # ------------------------------------------------------------------
     FILE = "/data/archive/sgp/sgpminimplC1.b1/sgpminimplC1.b1.20260214.000009.nc"
-    FILE = "/data/archive/sgp/sgpminimplC1.b1/sgpminimplC1.b1.20260612.000004.nc"
+    FILE = "/data/archive/sgp/sgpminimplC1.b1/sgpminimplC1.b1.20260612.000004.nc"  # test case for Donna
+    FILE = "/data/archive/kcg/kcgmplpolfsM1.b1/kcgmplpolfsM1.b1.20240601.000009.nc"
+    FILE = "/data/archive/kcg/kcgminimplS1.b1/kcgminimplS1.b1.20240601.000000.nc"  # test case from Damao
     ds     = xr.open_dataset(FILE)
     result = compute_nrb_dataset(ds, instrument_type="minimpl", config_dir="./configs",
-                                 deadtime_poly_degree=0, deadtime_n_extrap_samples=3)
+                                 deadtime_poly_degree=1, deadtime_n_extrap_samples=3)
 
     has_cross    = "ldr" in result
-    max_range_km = 10.0                         # maximum y-axis range (km)
+    max_range_km = 5.0                         # maximum y-axis range (km)
 
     # Build plot dataset — keep only up to max_range_km
     range_sel = result.range <= max_range_km
@@ -565,15 +587,15 @@ if __name__ == "__main__":
 
         da.plot.pcolormesh(
             ax=ax_c, x="time", y="range",
-            #cmap=cmap, vmin=vmin, vmax=vmax,
-            cmap=cmap, vmin=0.0, vmax=0.2,
+            cmap=cmap, vmin=vmin, vmax=vmax,
+            #cmap=cmap, vmin=0.0, vmax=0.08,
             cbar_kwargs={"label": cb_label},
         )
         ax_c.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
         t_base = plot_ds.time.values[0].astype('datetime64[D]')
-        ax_c.set_xlim(t_base + np.timedelta64(2, 'h'), t_base + np.timedelta64(5, 'h'))
+        #ax_c.set_xlim(t_base + np.timedelta64(14, 'h'), t_base + np.timedelta64(17, 'h'))
         ax_c.set_ylim(float(plot_ds.range[0]), max_range_km)
-        ax_c.set_ylim((2, 3))
+        #ax_c.set_ylim((0.5, 1.5))
         ax_c.set_title(f"{title} Curtain")
         ax_c.set_xlabel("Time (UTC)")
         ax_c.set_ylabel("Range (km)")

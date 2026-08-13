@@ -657,12 +657,16 @@ def plot_time_mean_profiles(
         if time_slice is not None:
             da = da.sel(time=time_slice)
 
+        # Ensure (time, range) layout before averaging
+        if list(da.dims) != ["time", "range"]:
+            da = da.transpose("time", "range")
+
         # Apply mask: replace masked values with NaN before averaging
         if mask is not None:
             m = mask.sel(time=da.time) if "time" in mask.dims else mask
             da = da.where(m)
 
-        # Time-mean: nanmean along the time axis
+        # Time-mean: nanmean along the time axis (axis=0 → time)
         profile = np.nanmean(da.values, axis=0)
         range_coord = da["range"].values
 
