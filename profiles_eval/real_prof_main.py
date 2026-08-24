@@ -276,4 +276,4 @@ if __name__ == "__main__":
                 output_path=args.output_path,
             )
             print(f"\nExported: {out}")
-        t = t_nex
+        t = t_next
