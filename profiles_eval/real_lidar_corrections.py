@@ -16,6 +16,9 @@ import numpy as np
 import xarray as xr
 
 from real_prof_init import load_config
+from real_lidar_deadtime import (DEFAULT_DEADTIME_METHOD, deadtime_attributes,
+                                 make_deadtime_extrapolator, monotonic_deadtime_factors,
+                                 resolve_deadtime_method)
 
 
 def apply_deadtime_correction(
@@ -24,16 +27,16 @@ def apply_deadtime_correction(
     correction_factors: np.ndarray,
     poly_degree: int = 1,
     n_extrap_samples: int = 3,
+    method=DEFAULT_DEADTIME_METHOD,
+    enforce_monotonic_factors: bool = True,
 ) -> np.ndarray:
     """
     Apply deadtime correction to raw photon-counting lidar signals using
     a precomputed lookup table (LUT).
 
     Values within the LUT range are linearly interpolated.  Values above the
-    maximum LUT count rate are extrapolated via a polynomial fit in log-log
-    space fitted to the last ``n_extrap_samples`` LUT points, or clamped
-    if ``poly_degree=0``.  Values below the minimum LUT count rate are
-    clamped to the first LUT factor.
+    maximum LUT count rate are extrapolated with ``method``.  Values below the
+    minimum LUT count rate are clamped to the first LUT factor.
 
     Parameters
     ----------
@@ -50,12 +53,19 @@ def apply_deadtime_correction(
         factor at each count rate. A value of 1.0 means no correction;
         values > 1.0 indicate the true signal exceeds the measured signal.
     poly_degree : int, optional
-        Polynomial degree for log-log extrapolation above the LUT maximum.
-        Default is 1 (power-law). Set to 0 to clamp to the last LUT factor.
-
+        ``"loglog1"`` only: polynomial degree in log-log space. Default 1
+        (power law); 0 clamps to the last LUT factor.
     n_extrap_samples : int, optional
-        Number of trailing LUT points used to fit the extrapolation polynomial.
-        Ignored when ``poly_degree=0``. Default is 3.
+        ``"loglog1"`` only: number of trailing LUT points fitted. Default 3.
+    method : str or dict, optional
+        Extrapolation method above the LUT maximum: a name from
+        ``real_lidar_deadtime.DEADTIME_METHODS`` or a method dict (see
+        :func:`real_lidar_deadtime.make_deadtime_extrapolator`).  Default
+        ``real_lidar_deadtime.DEFAULT_DEADTIME_METHOD``.
+    enforce_monotonic_factors : bool, optional
+        If True (default), decreasing (non-physical) LUT factors are replaced
+        by linear interpolation, or dropped when at the end of the LUT, before
+        use (see :func:`real_lidar_deadtime.monotonic_deadtime_factors`).
 
     Returns
     -------
@@ -65,20 +75,21 @@ def apply_deadtime_correction(
     """
     if not isinstance(poly_degree, int) or poly_degree < 0:
         raise ValueError(f"poly_degree must be a non-negative integer, got {poly_degree}")
+    resolve_deadtime_method(method)      # validate early
+    if enforce_monotonic_factors:
+        correction_counts, correction_factors = monotonic_deadtime_factors(
+            correction_counts, correction_factors)
 
     flat = raw_signal.ravel()
     interp_factors = np.interp(flat, correction_counts, correction_factors)
 
-    if poly_degree > 0:
-        upper_mask = flat > correction_counts[-1]
-        if upper_mask.any():
-            n = min(n_extrap_samples, len(correction_counts))
-            log_x_fit = np.log(correction_counts[-n:])
-            log_y_fit = np.log(correction_factors[-n:])
-            coeffs = np.polyfit(log_x_fit, log_y_fit, poly_degree)
-            interp_factors[upper_mask] = np.exp(
-                np.polyval(coeffs, np.log(flat[upper_mask]))
-            )
+    upper_mask = flat > correction_counts[-1]
+    if upper_mask.any():
+        extrapolate, _ = make_deadtime_extrapolator(
+            correction_counts, correction_factors, method,
+            poly_degree=poly_degree, n_extrap_samples=n_extrap_samples,
+        )
+        interp_factors[upper_mask] = extrapolate(flat[upper_mask])
 
     return raw_signal * interp_factors.reshape(raw_signal.shape)
 
@@ -191,9 +202,9 @@ def apply_overlap_correction(
 ) -> np.ndarray:
     """
     Apply overlap correction by interpolating an overlap LUT onto the
-    range grid of the signal and dividing.
-    Bins where the interpolated overlap is zero are set to NaN to avoid
-    division by zero.
+    range grid of the signal and multiplying.
+    Bins where the interpolated factor is zero (placeholder entries) are
+    set to NaN.
 
     Parameters
     ----------
@@ -203,8 +214,9 @@ def apply_overlap_correction(
         1D array of shape (n_lut,) containing the range axis of the overlap
         LUT in km. Must be monotonically increasing.
     overlap_factors : np.ndarray
-        1D array of shape (n_lut,) containing the overlap correction factors
-        in [0, 1] at each range in overlap_range.
+        1D array of shape (n_lut,) containing the multiplicative overlap
+        correction factors (>= 1, equal to 1 at full overlap) at each range
+        in overlap_range.
     range_km : np.ndarray
         1D array of shape (n_range_bins,) with the range gate centres in km
         onto which the LUT is interpolated.
@@ -213,16 +225,16 @@ def apply_overlap_correction(
     -------
     corrected : np.ndarray
         2D array of shape (n_profiles, n_range_bins) with overlap correction
-        applied. Bins with zero overlap are NaN.
+        applied. Bins with a zero factor are NaN.
     """
     # Interpolate overlap LUT onto the signal range grid
     # Out-of-range bins are extrapolated using the nearest boundary value
     overlap_interp = np.interp(range_km, overlap_range, overlap_factors)
 
-    # Zero-overlap bins cannot be corrected
+    # Zero entries are placeholders, not valid factors
     overlap_safe = np.where(overlap_interp == 0.0, np.nan, overlap_interp)
 
-    return signal / overlap_safe   # broadcasts (n_profiles, n_bins) / (n_bins,)
+    return signal * overlap_safe   # broadcasts (n_profiles, n_bins) * (n_bins,)
 
 
 def apply_energy_normalization(
@@ -277,6 +289,8 @@ def compute_nrb(
     deadtime_n_extrap_samples: int = 3,
     energy: np.ndarray = None,
     energy_reference: float = 1.0,
+    deadtime_method=DEFAULT_DEADTIME_METHOD,
+    enforce_monotonic_factors: bool = True,
 ) -> np.ndarray:
     """
     Compute the Normalized Relative Backscatter (NRB) from raw lidar data.
@@ -326,7 +340,8 @@ def compute_nrb(
         1D array of shape (n_lut_ol,) with range axis of overlap LUT in km.
         Must be monotonically increasing.
     overlap_factors : np.ndarray
-        1D array of shape (n_lut_ol,) with overlap correction factors in [0,1].
+        1D array of shape (n_lut_ol,) with multiplicative overlap correction
+        factors (>= 1).
     calibration_constant : float, optional
         Instrument calibration constant C. Use 1.0 for relative NRB.
         Default is 1.0.
@@ -342,12 +357,19 @@ def compute_nrb(
         no energy normalization is applied.
     energy_reference : float, optional
         Reference energy for normalization. Default 1.0 (plain division).
+    deadtime_method : str or dict, optional
+        Deadtime extrapolation method above the LUT maximum (one of
+        ``real_lidar_deadtime.DEADTIME_METHODS`` or a method dict). Default
+        ``real_lidar_deadtime.DEFAULT_DEADTIME_METHOD``.
+    enforce_monotonic_factors : bool, optional
+        Replace decreasing deadtime LUT factors by linear interpolation.
+        Default True.
 
     Returns
     -------
     nrb : np.ndarray
         2D array of shape (n_profiles, n_range_bins) with NRB values in
-        counts/us * km^2. Bins with zero overlap are NaN.
+        counts/us * km^2. Bins with a zero overlap factor are NaN.
     """
     # Step 1 — deadtime correction
     signal = apply_deadtime_correction(
@@ -356,6 +378,8 @@ def compute_nrb(
         deadtime_correction_factors,
         poly_degree=deadtime_poly_degree,
         n_extrap_samples=deadtime_n_extrap_samples,
+        method=deadtime_method,
+        enforce_monotonic_factors=enforce_monotonic_factors,
     )
 
     # Step 2 — afterpulse correction
@@ -404,6 +428,8 @@ def compute_nrb_dataset(
     energy_reference: float = 1.0,
     total_nrb: bool = True,
     fully_linear_pulses: bool = False,
+    deadtime_method=DEFAULT_DEADTIME_METHOD,
+    enforce_monotonic_factors: bool = True,
 ) -> "xr.Dataset":
     """
     Compute co-pol NRB and, optionally, cross-pol NRB and linear depolarization
@@ -469,6 +495,13 @@ def compute_nrb_dataset(
         True if the lidar transmits fully linearly polarized pulses; False
         (default) if it uses the hybrid approach (linear and circular).
         Selects the LDR and total NRB formulas (see above).
+    deadtime_method : str or dict, optional
+        Deadtime extrapolation method above the LUT maximum (one of
+        ``real_lidar_deadtime.DEADTIME_METHODS`` or a method dict). Default
+        ``real_lidar_deadtime.DEFAULT_DEADTIME_METHOD``.
+    enforce_monotonic_factors : bool, optional
+        Replace decreasing deadtime LUT factors by linear interpolation.
+        Default True.
 
     Returns
     -------
@@ -548,6 +581,8 @@ def compute_nrb_dataset(
         deadtime_n_extrap_samples   = deadtime_n_extrap_samples,
         energy                      = energy,
         energy_reference            = energy_reference,
+        deadtime_method             = deadtime_method,
+        enforce_monotonic_factors   = enforce_monotonic_factors,
     )
 
     dims = ("time", "range")
@@ -590,6 +625,8 @@ def compute_nrb_dataset(
             deadtime_n_extrap_samples   = deadtime_n_extrap_samples,
             energy                      = energy,
             energy_reference            = energy_reference,
+            deadtime_method             = deadtime_method,
+            enforce_monotonic_factors   = enforce_monotonic_factors,
         )
         if fully_linear_pulses:
             ldr = nrb_cross / nrb_co
@@ -621,13 +658,27 @@ def compute_nrb_dataset(
              "comment": ldr_comment},
         )
 
-    return xr.Dataset(
+    result = xr.Dataset(
         data_vars,
         coords={
             "time":  ds[_name(v["time"])],
             "range": range_km,
         },
     )
+
+    # Provenance: every field returned depends on the deadtime-corrected
+    # signal, so each one records the deadtime extrapolation method attributes.
+    dt_counts_used, dt_factors_used = (
+        monotonic_deadtime_factors(dt_counts, dt_factors)
+        if enforce_monotonic_factors else (dt_counts, dt_factors))
+    dt_attrs = deadtime_attributes(
+        dt_counts_used, dt_factors_used, deadtime_method,
+        poly_degree=deadtime_poly_degree, n_extrap_samples=deadtime_n_extrap_samples,
+    )
+    dt_attrs["deadtime_lut_monotonic_enforced"] = str(bool(enforce_monotonic_factors))
+    for name in result.data_vars:
+        result[name].attrs.update(dt_attrs)
+    return result
 
 
 # -----------------------------------------------------------------------

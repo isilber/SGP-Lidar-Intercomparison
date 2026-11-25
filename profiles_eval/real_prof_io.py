@@ -12,8 +12,9 @@ import numpy as np
 import xarray as xr
 
 from real_prof_init import load_config
-from real_prof_utils import interpolate_data
+from real_prof_utils import interpolate_data, _DEFAULT_RANGE_KM
 from real_lidar_corrections import compute_nrb_dataset
+from real_lidar_deadtime import DEFAULT_DEADTIME_METHOD
 
 # Number of cloud/precipitation layers used throughout the pipeline
 N_LAYERS = 10
@@ -126,6 +127,26 @@ def _ordered_vars(var_names: list[str]) -> list[str]:
         _pop(var)
 
     return ordered
+
+
+_SGP_PATCH_DIR = Path(__file__).parent / "sgp_patch_corr"
+
+
+def _patch_sgp_mplpolfs_corrections(ds: xr.Dataset) -> xr.Dataset:
+    """Replace the (outdated) afterpulse, deadtime and overlap LUTs in the SGP
+    mplpolfs files with those in ``sgp_patch_corr/``."""
+    d = _SGP_PATCH_DIR
+    ap = np.loadtxt(next(d.glob("Aftpls_*.txt")), skiprows=1)    # bin, co, cross
+    dt = np.loadtxt(next(d.glob("Deadtime_*.txt")), skiprows=2)  # counts/us, factor
+    ol = np.loadtxt(next(d.glob("Overlap_*.txt")), skiprows=2)   # km, factor
+    return ds.assign(
+        afterpulse_correction_co_pol=(("sgp_ap",), ap[:, 1]),
+        afterpulse_correction_cross_pol=(("sgp_ap",), ap[:, 2]),
+        deadtime_correction_counts=(("sgp_dt",), dt[:, 0]),
+        deadtime_correction=(("sgp_dt",), dt[:, 1]),
+        overlap_correction_heights=(("sgp_ol",), ol[:, 0]),
+        overlap_correction=(("sgp_ol",), ol[:, 1]),
+    )
 
 
 def find_arm_files(
@@ -366,11 +387,23 @@ def load_arm_data(
         # static variables (correction LUTs, range) come from the first file.
         data_vars="minimal",
         coords="minimal",
+        # Static (non-time) variables such as 'range' can differ slightly
+        # between files (e.g. a changed range_offset); take them from the
+        # first file instead of raising a MergeError.
+        compat="override",
         preprocess=_preprocess,
         engine="netcdf4",
     )
 
     merged = merged.sortby("time")
+
+    # MPL (mplpolfs datastrean): 'range' (offset-corrected) is a variable
+    # on the 'range_bins' dimension.  Make 'range' the dimension coordinate so
+    # all per-bin arrays (signal, afterpulse) are indexed by the true range.
+    if (info.get("instrument_class") == "mplpolfs"
+            and "range" in merged.variables and "range" not in merged.dims
+            and merged["range"].dims == ("range_bins",)):
+        merged = merged.swap_dims({"range_bins": "range"})
 
     # ------------------------------------------------------------------
     # 4. Trim to [time_min - safety_delta, first sample > time_max]
@@ -405,12 +438,81 @@ def load_arm_data(
         ds[var].attrs["source_datastream"]      = source_datastream
         ds[var].attrs["source_process_version"] = source_process_version
 
+    if info.get("instrument_class") == "mplpolfs" and str(site).lower() == "sgp":
+        ds = _patch_sgp_mplpolfs_corrections(ds)
+
     return ds
 
 
 # ---------------------------------------------------------------------------
 # High-level loader + processor
 # ---------------------------------------------------------------------------
+
+_TIME_SERIES_KEYS = {
+    "num_cloud_layers", "qc_num_cloud_layers", "precipitation_detection",
+    "fog_detection", "particulate_optical_depth", "pblh", "energy_monitor",
+}
+
+
+def _make_missing_instrument_dataset(
+    instrument_type: str,
+    config_dir: str,
+    time_min: np.datetime64,
+    time_max: np.datetime64,
+    time_step: np.timedelta64,
+    range_km: "np.ndarray | None",
+    total_nrb: bool,
+) -> xr.Dataset:
+    """
+    Build an all-NaN dataset for an instrument with no data
+    """
+    cfg = load_config(instrument_type, config_dir)
+    info = cfg["instrument_info"]
+    coords_cfg = cfg.get("coordinates", {})
+    has_range = "range" in coords_cfg
+    has_layer = "layer" in coords_cfg
+    needs_corr = (info.get("type", "lidar") == "lidar"
+                  and info.get("requires_corrections", False))
+
+    step_ns = int(time_step / np.timedelta64(1, "ns"))
+    t0 = time_min.astype("datetime64[ns]").astype(np.int64)
+    t1 = time_max.astype("datetime64[ns]").astype(np.int64)
+    out_time = np.arange(t0, t1, step_ns).astype("datetime64[ns]")
+    out_range = np.asarray(_DEFAULT_RANGE_KM if range_km is None else range_km)
+
+    data_vars = {}
+    for key in cfg["variables"]:
+        if key in ("time", "range"):
+            continue
+        # numbered cloud_base2, cloud_top3, ... are folded into the layer dim
+        if key[-1].isdigit() and key.rstrip("0123456789") in ("cloud_base", "cloud_top"):
+            continue
+        if needs_corr:
+            if key.startswith(("raw_signal", "background_")):
+                continue
+            if total_nrb and key == "attenuated_backscatter_cross_pol":
+                continue
+        if key.startswith(("cloud_base", "cloud_top")) and has_layer:
+            dims = ("time", "layer")
+        elif key.startswith(("cloud_base", "cloud_top")):
+            dims = ("time",)
+        elif has_range and key not in _TIME_SERIES_KEYS:
+            dims = ("time", "range")
+        else:
+            dims = ("time",)
+        shape = tuple(
+            {"time": out_time.size, "range": out_range.size, "layer": N_LAYERS}[d]
+            for d in dims
+        )
+        data_vars[key] = (dims, np.full(shape, np.nan))
+
+    coords = {"time": out_time}
+    if any("range" in d for d, _ in data_vars.values()):
+        coords["range"] = out_range
+    if any("layer" in d for d, _ in data_vars.values()):
+        coords["layer"] = np.arange(N_LAYERS)
+    return xr.Dataset(data_vars, coords=coords)
+
 
 def load_and_process_arm_data(
     instrument_type: str | list[str],
@@ -429,14 +531,12 @@ def load_and_process_arm_data(
     deadtime_n_extrap_samples: int = 3,
     total_nrb: bool = True,
     fully_linear_pulses: bool = False,
+    deadtime_method=DEFAULT_DEADTIME_METHOD,
+    fill_missing: bool = False,
+    enforce_monotonic_factors: bool = True,
 ) -> xr.Dataset:
     """
     Load, optionally correct, and optionally interpolate ARM data.
-
-    This function chains :func:`load_arm_data`, optional NRB corrections
-    (when ``instrument_info.requires_corrections`` is ``true`` and
-    ``instrument_info.type`` is ``"lidar"``), and optional uniform-grid
-    interpolation via :func:`real_prof_utils.interpolate_data`.
 
     If the instrument config contains an ``instrument_class_highres`` key,
     a second higher-resolution dataset is loaded from the same directory.
@@ -503,6 +603,17 @@ def load_and_process_arm_data(
         (default) for the hybrid approach (linear and circular)
         used by the MPL and mini-MPL.  Selects the LDR and total
         NRB formulas in :func:`compute_nrb_dataset`.
+    deadtime_method : str or dict, optional
+        Deadtime extrapolation method above the LUT maximum (one of
+        ``real_lidar_deadtime.DEADTIME_METHODS`` or a method dict). Default
+        ``real_lidar_deadtime.DEFAULT_DEADTIME_METHOD``.
+    fill_missing : bool, optional
+        Only used when ``instrument_type`` is a list and ``interpolate`` is
+        True.  If True, instruments with no data are allocated as all-NaN
+        variables.  Default is False.
+    enforce_monotonic_factors : bool, optional
+        Replace decreasing deadtime LUT factors by linear interpolation.
+        Default True.
 
     Returns
     -------
@@ -528,10 +639,23 @@ def load_and_process_arm_data(
                     deadtime_n_extrap_samples=deadtime_n_extrap_samples,
                     total_nrb=total_nrb,
                     fully_linear_pulses=fully_linear_pulses,
+                    deadtime_method=deadtime_method,
+                    fill_missing=fill_missing,
+                    enforce_monotonic_factors=enforce_monotonic_factors,
                 )
             except FileNotFoundError as exc:
-                warnings.warn(f"[{instr}] skipped — {exc}", stacklevel=2)
-                continue
+                if fill_missing and interpolate:
+                    warnings.warn(
+                        f"[{instr}] no data — filling with NaN ({exc})",
+                        stacklevel=2,
+                    )
+                    ds_instr = _make_missing_instrument_dataset(
+                        instr, config_dir, time_min, time_max, time_step,
+                        range_km, total_nrb,
+                    )
+                else:
+                    warnings.warn(f"[{instr}] skipped — {exc}", stacklevel=2)
+                    continue
             rename_map = {var: f"{instr}_{var}" for var in ds_instr.data_vars}
             # Rename any dimension that is not a shared axis (time, range, layer)
             # to avoid conflicts when instruments have different sizes for
@@ -685,6 +809,8 @@ def load_and_process_arm_data(
             deadtime_n_extrap_samples=deadtime_n_extrap_samples,
             total_nrb=total_nrb,
             fully_linear_pulses=fully_linear_pulses,
+            deadtime_method=deadtime_method,
+            enforce_monotonic_factors=enforce_monotonic_factors,
         )
 
         # Propagate source attributes; read from any variable in ds since
@@ -1018,7 +1144,12 @@ def export_dataset(
     other_coords   = {k: ds.coords[k] for k in ds.coords if k not in ordered_coords}
     ds_out = xr.Dataset(coords={**ordered_coords, **other_coords}, attrs=ds.attrs)
     for v in ds.data_vars:
-        ds_out[v] = ds[v]
+        da = ds[v]
+        # Enforce canonical dimension order: time first, then range/layer,
+        # then any remaining dims.
+        lead = [d for d in _DIM_COORD_ORDER if d in da.dims]
+        rest = [d for d in da.dims if d not in lead]
+        ds_out[v] = da.transpose(*lead, *rest)
     
     # Set range coordinate attributes if range exists
     if "range" in ds_out.coords:
@@ -1041,6 +1172,7 @@ def export_dataset(
         str(out_file),
         format="NETCDF4_CLASSIC",
         encoding=encoding,
+        unlimited_dims=["time"] if "time" in ds_out.dims else None,
     )
 
     return out_file.resolve()

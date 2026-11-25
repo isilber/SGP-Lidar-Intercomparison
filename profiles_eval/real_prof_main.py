@@ -19,7 +19,7 @@ import numpy as np
 import xarray as xr
 
 from real_prof_io import load_and_process_arm_data, export_dataset, extract_geographic_metadata
-from real_prof_init import get_supplementary_facilities
+from real_prof_init import get_supplementary_facilities, get_site_instruments
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -81,9 +81,23 @@ def main(
     print(f"Path template: {data_path_template}")
     print("=" * 70)
 
+    # Per-site/facility instrument lists (configs/site_instruments.json).
+    # An entry overrides ALL_INSTRUMENTS and enables NaN-filling of
+    # instruments with no data; without an entry, ALL_INSTRUMENTS is used
+    # and missing instruments are omitted.
+    site_cfg = get_site_instruments(site, facility, CONFIG_DIR)
+    if site_cfg is not None:
+        instruments = site_cfg["instruments"]
+        supp_instruments = site_cfg["supplementary"]
+        fill_missing = True
+    else:
+        instruments = ALL_INSTRUMENTS
+        supp_instruments = {}
+        fill_missing = False
+
     # Extract geographic metadata (lat/lon/alt) from first available data file
     geo_data = extract_geographic_metadata(
-        ALL_INSTRUMENTS,
+        instruments,
         site,
         facility,
         None,
@@ -96,7 +110,7 @@ def main(
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         ds = load_and_process_arm_data(
-            instrument_type    = ALL_INSTRUMENTS,
+            instrument_type    = instruments,
             site               = site,
             facility           = facility,
             data_path          = None,
@@ -105,6 +119,7 @@ def main(
             config_dir         = CONFIG_DIR,
             data_path_template = data_path_template,
             interpolate        = True,
+            fill_missing       = fill_missing,
         )
 
         # ------------------------------------------------------------------
@@ -115,9 +130,10 @@ def main(
 
         for supp_facility in supp_facilities:
             print(f"\nLoading supplementary facility '{supp_facility}'...")
+            supp_list = supp_instruments.get(supp_facility, instruments)
             try:
                 ds_supp = load_and_process_arm_data(
-                    instrument_type    = ALL_INSTRUMENTS,
+                    instrument_type    = supp_list,
                     site               = site,
                     facility           = supp_facility,
                     data_path          = None,
@@ -126,6 +142,7 @@ def main(
                     config_dir         = CONFIG_DIR,
                     data_path_template = data_path_template,
                     interpolate        = True,
+                    fill_missing       = supp_facility in supp_instruments,
                 )
                 if ds_supp.data_vars:
                     # Build rename map: for each variable, find its instrument prefix
@@ -133,7 +150,7 @@ def main(
                     rename_map = {}
                     for var in ds_supp.data_vars:
                         # Find which instrument this variable belongs to
-                        for instr in ALL_INSTRUMENTS:
+                        for instr in supp_list:
                             prefix = f"{instr}_"
                             if var.startswith(prefix):
                                 rest = var[len(prefix):]
@@ -176,12 +193,12 @@ def main(
     # ------------------------------------------------------------------
     def _instr_group_key(var):
         """Sort key: (instr_index, 0_for_primary_1_for_supp, var_name)."""
-        for idx, instr in enumerate(ALL_INSTRUMENTS):
+        for idx, instr in enumerate(instruments):
             if var.startswith(f"{instr}_supp_"):
                 return (idx, 1, var)
             if var.startswith(f"{instr}_"):
                 return (idx, 0, var)
-        return (len(ALL_INSTRUMENTS), 0, var)
+        return (len(instruments), 0, var)
     
     ds = ds[sorted(ds.data_vars, key=_instr_group_key)]
 

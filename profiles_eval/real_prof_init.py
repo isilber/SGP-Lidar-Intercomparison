@@ -193,6 +193,48 @@ def load_facility_pairs(config_dir: str = "./configs") -> Dict:
         raise ValueError(f"Invalid JSON in facility pairs file {pairs_file}: {e}")
 
 
+def get_site_instruments(
+    site: str, facility: str, config_dir: str = "./configs"
+) -> "dict | None":
+    """
+    Look up the instrument list for a (site, facility) pair in
+    ``site_instruments.json``.
+
+    Parameters
+    ----------
+    site : str
+        ARM site code.
+    facility : str
+        Primary ARM facility code.
+    config_dir : str, optional
+        Directory containing JSON configuration files.
+
+    Returns
+    -------
+    dict or None
+        ``{"instruments": list[str], "supplementary": dict[str, list[str]]}``
+        if an entry exists for the pair, otherwise ``None`` (callers then fall
+        back to their default instrument list).
+    """
+    f = Path(config_dir) / "site_instruments.json"
+    if not f.exists():
+        return None
+    try:
+        with open(f, "r") as fh:
+            data = json.load(fh)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in {f}: {e}")
+    entry = data.get(site, {}).get(facility)
+    if entry is None:
+        return None
+    return {
+        "instruments": list(entry.get("instruments", [])),
+        "supplementary": {
+            k: list(v) for k, v in entry.get("supplementary", {}).items()
+        },
+    }
+
+
 def get_supplementary_facilities(
     site: str, facility: str, config_dir: str = "./configs"
 ) -> list[str]:

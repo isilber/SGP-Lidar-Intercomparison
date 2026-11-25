@@ -1,0 +1,28 @@
+{
+  "sgp": {
+    "C1": {
+      "instruments": [
+        "ceil", "ceilpol", "hsrl", "rl", "minimpl", "mpl", "dl",
+        "dlwind", "interpolatedsonde", "pblhtbeml"
+      ],
+      "supplementary": {
+        "E13": [
+         "dl", "dlwindstat"
+        ]
+      }
+    }
+  },
+  "kcg": {
+    "M1": {
+      "instruments": [
+        "ceil", "mpl", "dl",
+        "dlwind", "dlwindstat", "interpolatedsonde", "pblhtbeml"
+      ],
+      "supplementary": {
+        "S1": [
+         "minimpl"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "instrument_info": {
+    "name": "PBL Height Best Estimate ML",
+    "type": "aux",
+    "instrument_class": "pblhtbeml",
+    "level": "c1"
+  },
+  "variables": {
+    "time": {
+      "name_in_file": "time",
+      "units": "sec"
+    },
+    "pblh": {
+      "name_in_file": "pblhtbeml_lightgbm",
+      "units": "m"
+    }
+  },
+  "coordinates": {
+    "time": "time"
+  }
+}

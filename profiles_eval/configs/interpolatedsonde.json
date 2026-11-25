@@ -12,7 +12,7 @@
     },
     "range": {
       "name_in_file": "height",
-      "units": "m"
+      "units": "km"
     },
     "temp": {
       "name_in_file": "temp",
